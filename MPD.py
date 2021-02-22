@@ -1,28 +1,25 @@
 import numpy as np
 import xarray as xr
-#import dbfread
 import rasterio
 from affine import Affine
-# import gdal
-# from dbfread import DBF
+from dbfread import DBF
 import math
-# from tifffile import imread
-##Be better in the future
+import sys
+
+
+#I need proof
 
 # to open a tiff file for reading:
-popCount_tif = xr.open_rasterio('C:/Users\grego\Documents\Coding Temple 2021\Moment of Population Density\World-Data\gpw-v4-population-count-rev11_2020_1_deg_tif\gpw_v4_population_count_rev11_2020_1_deg.tif')
-natID_tif = xr.open_rasterio('C:/Users\grego\Documents\Coding Temple 2021\Moment of Population Density\World-Data\gpw-v4-national-identifier-grid-rev11_1_deg_tif\gpw_v4_national_identifier_grid_rev11_1_deg.tif')
+pt = xr.open_rasterio('C:/Users\grego\Documents\Coding Temple 2021\Moment of Population Density\World-Data\gpw-v4-population-count-rev11_2020_30_sec_tif\gpw_v4_population_count_rev11_2020_30_sec.tif')
+nt = xr.open_rasterio('C:/Users\grego\Documents\Coding Temple 2021\Moment of Population Density\World-Data\gpw-v4-national-identifier-grid-rev11_30_sec_tif\gpw_v4_national_identifier_grid_rev11_30_sec.tif')
 #f = open('data.xls',"w")
-pt = popCount_tif
-y = pt.coords['y'].values
-x = pt.coords['x'].values
 # print(len(pt.coords['y'].values))
 # print(len(pt.coords['x'].values))
 # print(pt.values[0][15000][15000])
-for i in range(len(y)):
-    for j in range(len(x)):
-        if pt.values[0][i][j] > 0:
-            print('latitude:' , y[i],'longitude:',x[j],'population:',pt.values[0][i][j])
+# for i in range(len(y)):
+#     for j in range(len(x)):
+        # if pt.values[0][i][j] > 0:
+        #     print('latitude:' , y[i],'longitude:',x[j],'population:',pt.values[0][i][j])
 
 # for i in x.parse_coordinates():
 #     # if i =='coords':
@@ -31,11 +28,10 @@ for i in range(len(y)):
 
 # print(x)
 
-exit(0)
 
-country = {'32767':'32767'}
-total_pop = {'32767':0}
-total_vector = {}
+country = {32767:'32767',-32768:'-32768'}
+total_pop = {'32767':0,'-32768':0}
+total_vector = {'32767':[0,0,0],'-32768':[0,0,0]}
 
 for record in DBF('C:/Users\grego\Documents\Coding Temple 2021\Moment of Population Density\World-Data\gpw-v4-national-identifier-grid-rev11_1_deg_tif\gpw_v4_national_identifier_grid_rev11_1_deg.dbf'):
     country[record['Value']] = record['NAME0']
@@ -49,37 +45,49 @@ def sph_cart(theta,phi,r=1):
     return [x,y,z]
 
 def cart_sph(x,y,z):
+    if [x,y,z] == [0,0,0]:
+        return [0,0,0]
     r = math.sqrt(x**2 + y**2 + z**2)
     theta = math.atan2(y/r, x/r)
     phi = math.asin(z/r)
     return[theta,phi,r]
 
-# Print('Please input a country code')
-# x=input()
-# 'Iceland': [147382.1216491367, -56891.63763733793, 330850.9213823778]
 
-XX = cart_sph(147382.1216491367, -56891.63763733793, 330850.9213823778)
 
-print((XX[0]*180)/math.pi, (XX[1]*180)/math.pi, XX[2])
+for i in range(len(pt.x)):
+    print(i, file=sys.stderr)
+    for j in range(len(pt.y)):
+        country_name = country[int(nt.values[0][j][i])]
+        if pt.values[0][j][i] <= 0: continue
+        lat_coord = float(pt.y[j])
+        long_coord = float(pt.x[i])
+        population = float(pt.values[0][j][i])
+        coord = sph_cart(long_coord*(math.pi/180), lat_coord*(math.pi/180))
+        total_pop[country_name] += population
+        for ku in range(0,3): total_vector[country_name][ku] += coord[ku] * population
 
-exit(0)
+for el in country.values():
+    vector = cart_sph(total_vector[el][0],total_vector[el][1],total_vector[el][2])
+    vector[0] *= 180/math.pi
+    vector[1] *= 180/math.pi
+    print(el,"\t",vector[0],"\t",vector[1])
 
-for i in range(0, len(popCount_tif)):
-    lat = 89.5 - i
-    for j in range(0, len(popCount_tif[i])):
-        lon = j - 179.5
-        population = popCount_tif[i][j]
-        country_name = country.get(natID_tif[i][j])
-        if population >= 0 and country_name == 'Iceland':
-            print("lat",lat,"long", lon)
-            total_pop[country_name] += population
-            coord = sph_cart(lon*(math.pi/180), lat*(math.pi/180))
-            print("coord",coord)
-            #print(coord)
-            for ku in range(0,3):
-                coord[ku] = coord[ku] * popCount_tif[i][j]
-                total_vector[country_name][ku] += coord[ku] 
-            coord.append(natID_tif[i][j])
+# print(total_vector)
+
+            # coord.append(natID_tif[j][i])
+
+        # print('latitude:' , lat_coord,'longitude:',long_coord,'population:',population, 'Contry Name', country_name)
+        # continue
+
+
+
+        
+        #     # print("lat",lat,"long", lon)
+        #     total_pop[country_name] += population
+        #     # coord = sph_cart(lon*(math.pi/180), lat*(math.pi/180))
+            # print("coord",coord)
+            # #print(coord)
+            
             # print(coord)
             #print(lat, lon, popCount_tif[i][j])
             #f.write(str(lat)+','+str(lon)+','+str(popCount_tif[i][j])+','+str(natID_tif[i][j])+'\n')
@@ -87,7 +95,7 @@ for i in range(0, len(popCount_tif)):
 
 
 # print(total_pop)
-print(total_vector)
+# print(total_vector)
 
 
 
